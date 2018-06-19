@@ -3,6 +3,8 @@ import numpy
 from matplotlib import pyplot as plt
 from matplotlib import animation as anim
 
+p = []
+
 def grabFrame(vc):
     ret, frame = vc.read()
     return (ret, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) if ret else None)
@@ -12,24 +14,37 @@ def processFrame(frame):
     img = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
 
     # Create a blurred images to smooth it out
-    blur = cv2.medianBlur(img, 5)
+    blur = cv2.medianBlur(img, 7)
 
     # Create a mask that includes only bright white elements
-    ret, mask = cv2.threshold(blur, 253, 255, cv2.THRESH_BINARY)
+    ret, mask = cv2.threshold(blur, 254, 255, cv2.THRESH_BINARY)
 
-    # Look for outlines in the mask image
-    edges = cv2.Canny(mask, 100, 200)
+    # Look for edges in the mask image
+    imgc, contours, hier = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
-    circles = cv2.HoughCircles(mask, cv2.HOUGH_GRADIENT, 1, 20, param1=30, param2=20, minRadius=3, maxRadius=60)
+    # Draw the contours on the image
+    cv2.drawContours(frame, contours, -1, (255, 0, 0), 2)
 
-    if circles is not None:
-        circles = numpy.uint16(numpy.around(circles))
+    # Find the centroid of each contour
+    for i in range(len(contours)):
+        c = contours[i];
+        m = cv2.moments(c)
 
-        for i in circles[0, :]:
-            cv2.circle(frame, (i[0], i[1]), i[2], (0, 255, 0), 2)
-            cv2.circle(frame, (i[0], i[1]), 2, (0, 0, 255), 3)
-    
-    return [frame, blur, edges, mask]
+        if m['m00'] > 0:
+            cx = int(m['m10']/m['m00'])
+            cy = int(m['m01']/m['m00'])
+
+            # Draw the path the centroid has taken
+            # TODO: store the trail for each centroid in a separate array
+            # p.append([cx, cy])
+            # np = numpy.array(p)
+            #if len(p) >= 3:
+            #    cv2.polylines(frame, numpy.int32([np]), False, (0, 0, 255), 2)
+
+            # Draw the centroid on the image
+            cv2.circle(frame, (cx, cy), 2, (0, 255, 0), 2)
+
+    return [frame, blur, imgc, mask]
 
 def update(j, vc, aimgs): 
     ret, frame = grabFrame(vc)   
@@ -48,7 +63,7 @@ def circles():
         exit(1)
 
     figure, subplots = plt.subplots(2, 2)
-    titles = ['frame', 'blur', 'edges', 'mask']
+    titles = ['frame', 'blur', 'contours', 'mask']
 
     ret, frame = grabFrame(vc)
     if (not ret):
