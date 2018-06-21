@@ -9,16 +9,20 @@ def grabFrame(vc):
     ret, frame = vc.read()
     return (ret, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) if ret else None)
 
-def processFrame(frame):
+def processFrame(frame, fgbg):
     # Convert to grayscale
     img = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+
+    fgmask = fgbg.apply(img)
 
     # Create a blurred images to smooth it out
     blur = cv2.medianBlur(img, 7)
 
     # Create a mask that includes only bright white elements
-    ret, mask = cv2.threshold(blur, 254, 255, cv2.THRESH_BINARY)
+    ret, mask = cv2.threshold(blur, 252, 255, cv2.THRESH_BINARY)
 
+    mask = numpy.bitwise_and(fgmask, mask)
+    
     # Look for edges in the mask image
     imgc, contours, hier = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
@@ -44,33 +48,37 @@ def processFrame(frame):
             # Draw the centroid on the image
             cv2.circle(frame, (cx, cy), 2, (0, 255, 0), 2)
 
-    return [frame, blur, imgc, mask]
+    return [frame, fgmask, imgc, mask]
 
-def update(j, vc, aimgs): 
+def update(j, vc, fgbg, aimgs): 
     ret, frame = grabFrame(vc)   
     if (not ret):
         return
 
-    images = processFrame(frame)
+    images = processFrame(frame, fgbg)
     for i in range(len(images)):
         aimgs[i].set_data(images[i])
 
 def circles():
     print("Reading video file")
-    vc = cv2.VideoCapture("images/wand_cross1.mov")
+    #vc = cv2.VideoCapture("images/wand_cross1.mov")
+    vc = cv2.VideoCapture(0)
     if (not vc.isOpened()):
         print("Could not read video file")
         exit(1)
 
     figure, subplots = plt.subplots(2, 2)
-    titles = ['frame', 'blur', 'contours', 'mask']
+    titles = ['frame', 'fgmask', 'contours', 'mask']
+
+    fgbg = cv2.createBackgroundSubtractorMOG2(history=120)
 
     ret, frame = grabFrame(vc)
     if (not ret):
         print("Could not grab first frame. Exiting...")
         exit(1)
 
-    images = processFrame(frame)
+    images = processFrame(frame, fgbg)
+
     aimgs = []
     for i in range(len(images)):
         plt.subplot(2, 2, i+1)
@@ -80,7 +88,7 @@ def circles():
         plt.yticks([])
         aimgs.append(aimg)
 
-    f = anim.FuncAnimation(figure, update, interval=20, fargs=(vc, aimgs))
+    f = anim.FuncAnimation(figure, update, interval=10, fargs=(vc, fgbg, aimgs))
 
     plt.show()
 
